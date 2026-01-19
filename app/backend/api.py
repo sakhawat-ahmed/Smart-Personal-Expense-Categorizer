@@ -3,14 +3,19 @@ from pydantic import BaseModel
 from typing import List, Optional
 import pandas as pd
 from datetime import datetime
-from models.predict import ExpensePredictor
+import joblib
+import numpy as np
 import uvicorn
 
-app = FastAPI(title="Smart Expense Categorizer API", 
-              description="API for automatic expense categorization")
+app = FastAPI(title="Smart Expense Categorizer API")
 
-# Initialize predictor
-predictor = ExpensePredictor()
+# Load model
+try:
+    model = joblib.load('models/expense_classifier.pkl')
+    print("✅ Model loaded successfully")
+except:
+    print("⚠️  Model not found, using fallback")
+    model = None
 
 class Transaction(BaseModel):
     description: str
@@ -21,38 +26,82 @@ class Transaction(BaseModel):
 class BatchRequest(BaseModel):
     transactions: List[Transaction]
 
-class CategorizationResponse(BaseModel):
+class PredictionResponse(BaseModel):
     category: str
     confidence: float
     description: str
     amount: float
-    probabilities: dict
+
+def preprocess_for_prediction(description, amount, date=None):
+    """Preprocess a single transaction"""
+    if date is None:
+        date = datetime.now()
+    else:
+        date = datetime.strptime(date, "%Y-%m-%d")
+    
+    desc_lower = description.lower()
+    
+    # Feature engineering (must match training)
+    features = {
+        'description': desc_lower,
+        'amount': float(amount),
+        'description_length': len(description),
+        'word_count': len(description.split()),
+        'has_digits': int(bool(any(char.isdigit() for char in description))),
+        'amount_log': np.log1p(float(amount)),
+        'month': date.month,
+        'day_of_week': date.weekday(),
+    }
+    
+    # Add keyword features
+    keywords = ['uber', 'amazon', 'netflix', 'starbucks', 'mcdonalds', 
+                'walmart', 'target', 'gas', 'groceries', 'restaurant']
+    for keyword in keywords:
+        features[f'has_{keyword}'] = int(keyword in desc_lower)
+    
+    return pd.DataFrame([features])
 
 @app.get("/")
 async def root():
     return {"message": "Smart Expense Categorizer API", "status": "running"}
 
-@app.post("/predict", response_model=CategorizationResponse)
-async def predict_single(transaction: Transaction):
+@app.get("/health")
+async def health():
+    return {"status": "healthy", "model_loaded": model is not None}
+
+@app.post("/predict", response_model=PredictionResponse)
+async def predict(transaction: Transaction):
     """Predict category for a single transaction"""
     try:
-        # Parse date if provided
-        date_obj = None
-        if transaction.date:
-            date_obj = datetime.strptime(transaction.date, "%Y-%m-%d")
+        if model is None:
+            # Fallback simple categorization
+            description = transaction.description.lower()
+            if any(word in description for word in ['uber', 'taxi', 'lyft', 'bus']):
+                category = "Transport"
+            elif any(word in description for word in ['starbucks', 'mcdonalds', 'restaurant', 'food']):
+                category = "Food"
+            elif any(word in description for word in ['amazon', 'walmart', 'target']):
+                category = "Shopping"
+            else:
+                category = "Other"
+            confidence = 0.5
+        else:
+            # Use ML model
+            X = preprocess_for_prediction(
+                transaction.description,
+                transaction.amount,
+                transaction.date
+            )
+            prediction = model.predict(X)[0]
+            probabilities = model.predict_proba(X)[0]
+            category = prediction
+            confidence = float(np.max(probabilities))
         
-        result = predictor.predict(
-            transaction.description,
-            transaction.amount,
-            date_obj
-        )
-        
-        return CategorizationResponse(
-            category=result['category'],
-            confidence=result['confidence'],
+        return PredictionResponse(
+            category=category,
+            confidence=confidence,
             description=transaction.description,
-            amount=transaction.amount,
-            probabilities=result.get('all_probabilities', {})
+            amount=transaction.amount
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -63,67 +112,24 @@ async def predict_batch(batch: BatchRequest):
     try:
         results = []
         for transaction in batch.transactions:
-            date_obj = None
-            if transaction.date:
-                date_obj = datetime.strptime(transaction.date, "%Y-%m-%d")
-            
-            result = predictor.predict(
-                transaction.description,
-                transaction.amount,
-                date_obj
-            )
-            
-            results.append({
-                "description": transaction.description,
-                "amount": transaction.amount,
-                "predicted_category": result['category'],
-                "confidence": result['confidence'],
-                "user_id": transaction.user_id
-            })
+            result = await predict(transaction)
+            results.append(result.dict())
         
         # Generate insights
-        insights = generate_insights(results)
+        df = pd.DataFrame(results)
+        insights = {
+            "total_spent": float(df['amount'].sum()),
+            "total_transactions": len(df),
+            "category_counts": df['category'].value_counts().to_dict(),
+            "average_confidence": float(df['confidence'].mean())
+        }
         
         return {
             "predictions": results,
-            "insights": insights,
-            "total_transactions": len(results)
+            "insights": insights
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-def generate_insights(predictions):
-    """Generate spending insights from predictions"""
-    df = pd.DataFrame(predictions)
-    
-    if len(df) == 0:
-        return {}
-    
-    insights = {
-        "total_spent": float(df['amount'].sum()),
-        "category_summary": {},
-        "top_categories": []
-    }
-    
-    # Calculate by category
-    category_totals = df.groupby('predicted_category')['amount'].sum().to_dict()
-    insights['category_summary'] = category_totals
-    
-    # Top categories by spending
-    top_cats = sorted(category_totals.items(), key=lambda x: x[1], reverse=True)[:3]
-    insights['top_categories'] = [
-        {"category": cat, "total": float(total)} for cat, total in top_cats
-    ]
-    
-    # Average transaction size
-    insights['average_transaction'] = float(df['amount'].mean())
-    
-    return insights
-
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
-
 if __name__ == "__main__":
-    uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=8000)

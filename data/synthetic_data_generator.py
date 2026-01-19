@@ -6,7 +6,6 @@ import random
 def generate_transaction_data(num_samples=5000):
     """Generate realistic synthetic transaction data"""
     
-    # Categories and their descriptions
     categories = {
         'Food': ['mcdonalds', 'starbucks', 'groceries', 'restaurant', 'pizza', 'coffee', 'lunch', 'dinner'],
         'Transport': ['uber', 'lyft', 'gas station', 'metro', 'parking', 'taxi', 'bus fare'],
@@ -18,7 +17,6 @@ def generate_transaction_data(num_samples=5000):
         'Other': ['atm withdrawal', 'bank fee', 'unknown']
     }
     
-    # Common merchant names and patterns
     merchants = {
         'Food': ['MCDONALDS', 'STARBUCKS', 'WHOLE FOODS', 'CHIPOTLE', 'DOMINOS', 'SUBWAY'],
         'Transport': ['UBER *RIDE', 'LYFT *TRIP', 'SHELL OIL', 'EXXONMOBIL', 'CITY METRO'],
@@ -34,19 +32,15 @@ def generate_transaction_data(num_samples=5000):
     start_date = datetime(2023, 1, 1)
     
     for i in range(num_samples):
-        # Random category
         category = random.choice(list(categories.keys()))
         
-        # Generate description
         if random.random() < 0.7:
             merchant = random.choice(merchants[category])
             desc = f"{merchant} #{random.randint(1000, 9999)}"
         else:
-            # More varied descriptions
             base_desc = random.choice(categories[category])
             desc = f"{base_desc.upper()} {random.choice(['PAYMENT', 'PURCHASE', 'CHARGE', ''])}"
         
-        # Generate amount based on category
         amount_ranges = {
             'Food': (5, 100),
             'Transport': (10, 150),
@@ -60,11 +54,9 @@ def generate_transaction_data(num_samples=5000):
         min_amt, max_amt = amount_ranges[category]
         amount = round(random.uniform(min_amt, max_amt), 2)
         
-        # Random date
         days_offset = random.randint(0, 365)
         date = start_date + timedelta(days=days_offset)
         
-        # Payment method
         payment_method = random.choice(['Credit Card', 'Debit Card', 'Cash', 'Bank Transfer'])
         
         data.append({
@@ -78,9 +70,9 @@ def generate_transaction_data(num_samples=5000):
     
     df = pd.DataFrame(data)
     df.to_csv('data/raw/transactions.csv', index=False)
-    print(f"Generated {num_samples} transactions")
+    print(f"✅ Generated {num_samples} transactions")
     return df
 
 if __name__ == "__main__":
-    df = generate_transaction_data(10000)
+    df = generate_transaction_data(2000)
     print(df.head())
