@@ -1,32 +1,38 @@
-FROM python:3.9-slim
+FROM python:3.10-slim
 
 WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
+    g++ \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
+# Copy requirements first (for better caching)
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
 COPY . .
 
-# Create data directory
+# Create necessary directories
 RUN mkdir -p data/raw data/processed models
 
-# Generate sample data and train model
-RUN python data/synthetic_data_generator.py
-RUN python models/train.py
+# Create non-root user
+RUN useradd -m -u 1000 user
+RUN chown -R user:user /app
+USER user
 
-# Expose ports
+# Expose ports for API and Streamlit
 EXPOSE 8000 8501
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8000/health')"
+    CMD curl -f http://localhost:8000/health || exit 1
 
-# Command to run both API and Streamlit
-CMD ["sh", "-c", "uvicorn app.backend.api:app --host 0.0.0.0 --port 8000 & streamlit run app.frontend.streamlit_app.py --server.port 8501 --server.address 0.0.0.0"]
+# Run both services
+CMD ["sh", "-c", "python data/synthetic_data_generator.py && python models/train.py && uvicorn app.backend.api:app --host 0.0.0.0 --port 8000 --reload & streamlit run app/frontend/streamlit_app.py --server.port 8501 --server.address 0.0.0.0 --server.headless=true"]
