@@ -6,16 +6,26 @@ from datetime import datetime
 import joblib
 import numpy as np
 import uvicorn
+import os
 
-app = FastAPI(title="Smart Expense Categorizer API")
+app = FastAPI(
+    title="Smart Expense Categorizer API",
+    description="API for automatic expense categorization using machine learning",
+    version="1.0.0"
+)
 
 # Load model
+model = None
+model_path = 'models/expense_classifier.pkl'
+
 try:
-    model = joblib.load('models/expense_classifier.pkl')
-    print("✅ Model loaded successfully")
-except:
-    print("⚠️  Model not found, using fallback")
-    model = None
+    if os.path.exists(model_path):
+        model = joblib.load(model_path)
+        print("✅ Model loaded successfully from", model_path)
+    else:
+        print(f"⚠️  Model not found at {model_path}, using fallback categorization")
+except Exception as e:
+    print(f"⚠️  Error loading model: {e}, using fallback categorization")
 
 class Transaction(BaseModel):
     description: str
@@ -33,11 +43,14 @@ class PredictionResponse(BaseModel):
     amount: float
 
 def preprocess_for_prediction(description, amount, date=None):
-    """Preprocess a single transaction"""
+    """Preprocess a single transaction for prediction"""
     if date is None:
         date = datetime.now()
     else:
-        date = datetime.strptime(date, "%Y-%m-%d")
+        try:
+            date = datetime.strptime(date, "%Y-%m-%d")
+        except:
+            date = datetime.now()
     
     desc_lower = description.lower()
     
@@ -61,30 +74,59 @@ def preprocess_for_prediction(description, amount, date=None):
     
     return pd.DataFrame([features])
 
+def fallback_categorization(description, amount):
+    """Fallback simple categorization if model is not available"""
+    description = description.lower()
+    
+    if any(word in description for word in ['uber', 'taxi', 'lyft', 'bus', 'metro', 'train']):
+        category = "Transport"
+    elif any(word in description for word in ['starbucks', 'mcdonalds', 'restaurant', 'food', 'coffee', 'lunch', 'dinner']):
+        category = "Food"
+    elif any(word in description for word in ['amazon', 'walmart', 'target', 'shop', 'store', 'best buy']):
+        category = "Shopping"
+    elif any(word in description for word in ['netflix', 'spotify', 'cinema', 'movie', 'theater']):
+        category = "Entertainment"
+    elif any(word in description for word in ['electric', 'water', 'internet', 'phone', 'bill', 'utility']):
+        category = "Utilities"
+    elif amount >= 1000:
+        category = "Income"
+    else:
+        category = "Other"
+    
+    return category, 0.7  # Medium confidence for fallback
+
 @app.get("/")
 async def root():
-    return {"message": "Smart Expense Categorizer API", "status": "running"}
+    return {
+        "message": "Smart Expense Categorizer API",
+        "status": "running",
+        "model_loaded": model is not None,
+        "endpoints": {
+            "docs": "/docs",
+            "health": "/health",
+            "predict": "/predict",
+            "predict_batch": "/predict-batch"
+        }
+    }
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "model_loaded": model is not None}
+    return {
+        "status": "healthy",
+        "model_loaded": model is not None,
+        "timestamp": datetime.now().isoformat()
+    }
 
 @app.post("/predict", response_model=PredictionResponse)
 async def predict(transaction: Transaction):
     """Predict category for a single transaction"""
     try:
         if model is None:
-            # Fallback simple categorization
-            description = transaction.description.lower()
-            if any(word in description for word in ['uber', 'taxi', 'lyft', 'bus']):
-                category = "Transport"
-            elif any(word in description for word in ['starbucks', 'mcdonalds', 'restaurant', 'food']):
-                category = "Food"
-            elif any(word in description for word in ['amazon', 'walmart', 'target']):
-                category = "Shopping"
-            else:
-                category = "Other"
-            confidence = 0.5
+            # Use fallback categorization
+            category, confidence = fallback_categorization(
+                transaction.description, 
+                transaction.amount
+            )
         else:
             # Use ML model
             X = preprocess_for_prediction(
@@ -116,20 +158,28 @@ async def predict_batch(batch: BatchRequest):
             results.append(result.dict())
         
         # Generate insights
-        df = pd.DataFrame(results)
-        insights = {
-            "total_spent": float(df['amount'].sum()),
-            "total_transactions": len(df),
-            "category_counts": df['category'].value_counts().to_dict(),
-            "average_confidence": float(df['confidence'].mean())
-        }
+        if results:
+            df = pd.DataFrame(results)
+            insights = {
+                "total_spent": float(df['amount'].sum()),
+                "total_transactions": len(df),
+                "category_counts": df['category'].value_counts().to_dict(),
+                "average_confidence": float(df['confidence'].mean()),
+                "average_amount": float(df['amount'].mean()),
+                "max_amount": float(df['amount'].max()),
+                "min_amount": float(df['amount'].min())
+            }
+        else:
+            insights = {}
         
         return {
             "predictions": results,
-            "insights": insights
+            "insights": insights,
+            "model_used": "ml_model" if model is not None else "fallback"
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 if __name__ == "__main__":
+    print("🚀 Starting Expense Categorizer API...")
     uvicorn.run(app, host="0.0.0.0", port=8000)

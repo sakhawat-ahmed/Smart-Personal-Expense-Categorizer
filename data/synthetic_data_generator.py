@@ -2,9 +2,12 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import random
+import os
 
-def generate_transaction_data(num_samples=5000):
+def generate_transaction_data(num_samples=2000):
     """Generate realistic synthetic transaction data"""
+    
+    print("Generating synthetic transaction data...")
     
     categories = {
         'Food': ['mcdonalds', 'starbucks', 'groceries', 'restaurant', 'pizza', 'coffee', 'lunch', 'dinner'],
@@ -69,10 +72,14 @@ def generate_transaction_data(num_samples=5000):
         })
     
     df = pd.DataFrame(data)
+    
+    # Ensure data directory exists
+    os.makedirs('data/raw', exist_ok=True)
+    
     df.to_csv('data/raw/transactions.csv', index=False)
-    print(f"✅ Generated {num_samples} transactions")
+    print(f"✅ Generated {num_samples} transactions to data/raw/transactions.csv")
+    print(df.head())
     return df
 
 if __name__ == "__main__":
-    df = generate_transaction_data(2000)
-    print(df.head())
+    generate_transaction_data(2000)

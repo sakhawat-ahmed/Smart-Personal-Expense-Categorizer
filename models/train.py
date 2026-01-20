@@ -9,17 +9,22 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, accuracy_score
 import joblib
 import warnings
+import os
 warnings.filterwarnings('ignore')
 
 def train_model():
     print("🚀 Starting model training...")
     
+    # Ensure models directory exists
+    os.makedirs('models', exist_ok=True)
+    
     # Load data
     try:
         df = pd.read_csv('data/raw/transactions.csv')
         print(f"📊 Loaded {len(df)} transactions")
-    except:
-        print("❌ Could not load data. Make sure to generate data first.")
+    except Exception as e:
+        print(f"❌ Could not load data: {e}")
+        print("Make sure to generate data first by running: python data/synthetic_data_generator.py")
         return
     
     # Feature engineering
@@ -85,7 +90,8 @@ def train_model():
     sample = X_test.head(3)
     predictions = pipeline.predict(sample)
     for i, (idx, row) in enumerate(sample.iterrows()):
-        print(f"  {row['description'][:30]}... → {predictions[i]}")
+        desc = row['description'][:50] + "..." if len(row['description']) > 50 else row['description']
+        print(f"  {desc} → {predictions[i]}")
     
     return pipeline
 
