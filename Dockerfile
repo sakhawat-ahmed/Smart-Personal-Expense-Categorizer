@@ -2,37 +2,35 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies including OCR tools
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     curl \
+    tesseract-ocr \
+    poppler-utils \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first (for better caching)
+# Copy requirements
 COPY requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy application
 COPY . .
 
-# Create necessary directories
-RUN mkdir -p data/raw data/processed models
+# Create directories
+RUN mkdir -p data/raw data/processed models uploads exports
 
 # Create non-root user
-RUN useradd -m -u 1000 user
-RUN chown -R user:user /app
+RUN useradd -m -u 1000 user && \
+    chown -R user:user /app
 USER user
 
-# Expose ports for API and Streamlit
 EXPOSE 8000 8501
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
-
-# Run both services
-CMD ["sh", "-c", "python data/synthetic_data_generator.py && python models/train.py && uvicorn app.backend.api:app --host 0.0.0.0 --port 8000 --reload & streamlit run app/frontend/streamlit_app.py --server.port 8501 --server.address 0.0.0.0 --server.headless=true"]
+CMD ["sh", "-c", "python scripts/init_db.py && python models/train.py && uvicorn app.backend.api:app --host 0.0.0.0 --port 8000 --reload & streamlit run app/frontend/streamlit_app.py --server.port 8501 --server.address 0.0.0.0"]

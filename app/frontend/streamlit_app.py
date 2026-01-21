@@ -4,6 +4,7 @@ import requests
 from datetime import datetime
 import plotly.express as px
 import json
+import numpy as np
 
 # Page configuration
 st.set_page_config(
@@ -54,8 +55,7 @@ st.markdown("### Automatically categorize your expenses using Machine Learning")
 
 # Sidebar
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=80)
-    st.title("Navigation")
+    st.markdown("### Navigation")
     page = st.radio(
         "Choose a page:",
         ["🏠 Dashboard", "🔍 Single Transaction", "📁 Batch Upload", "📊 Insights", "🔧 API Tools"]
@@ -107,7 +107,11 @@ if page == "🏠 Dashboard":
         st.metric("API Status", "✅ Online" if check_api_health()[0] else "❌ Offline")
     
     with col2:
-        st.metric("Model Type", "ML Model" if check_api_health()[1] and check_api_health()[1].get('model_loaded') else "Rule-based")
+        health_ok, health_info = check_api_health()
+        if health_ok and health_info and health_info.get('model_loaded'):
+            st.metric("Model Type", "ML Model")
+        else:
+            st.metric("Model Type", "Rule-based")
     
     with col3:
         st.metric("Transactions Processed", "Ready")
@@ -120,20 +124,18 @@ if page == "🏠 Dashboard":
     col1, col2 = st.columns(2)
     
     with col1:
-        with st.container(border=True):
-            st.markdown("### 🔍 Single Transaction")
-            st.write("Categorize one transaction at a time")
-            if st.button("Go to Single Transaction", key="quick_single"):
-                st.session_state.page = "🔍 Single Transaction"
-                st.rerun()
+        st.markdown("#### 🔍 Single Transaction")
+        st.write("Categorize one transaction at a time")
+        if st.button("Go to Single Transaction", key="quick_single"):
+            st.session_state.page = "🔍 Single Transaction"
+            st.rerun()
     
     with col2:
-        with st.container(border=True):
-            st.markdown("### 📁 Batch Upload")
-            st.write("Upload CSV file with multiple transactions")
-            if st.button("Go to Batch Upload", key="quick_batch"):
-                st.session_state.page = "📁 Batch Upload"
-                st.rerun()
+        st.markdown("#### 📁 Batch Upload")
+        st.write("Upload CSV file with multiple transactions")
+        if st.button("Go to Batch Upload", key="quick_batch"):
+            st.session_state.page = "📁 Batch Upload"
+            st.rerun()
 
 elif page == "🔍 Single Transaction":
     st.header("Categorize Single Transaction")
@@ -142,7 +144,6 @@ elif page == "🔍 Single Transaction":
     api_healthy, health_info = check_api_health()
     if not api_healthy:
         st.error("⚠️ API is not responding. Please make sure the backend server is running.")
-        st.info("Start the API with: `python app/backend/api.py`")
     
     col1, col2 = st.columns([2, 1])
     
@@ -473,7 +474,7 @@ elif page == "🔧 API Tools":
 st.markdown("---")
 st.markdown(
     "<div style='text-align: center; color: #666;'>"
-    "Smart Expense Categorizer • Powered by Machine Learning • "
+    "Smart Expense Categorizer • Powered by Streamlit • "
     f"© {datetime.now().year}"
     "</div>",
     unsafe_allow_html=True
