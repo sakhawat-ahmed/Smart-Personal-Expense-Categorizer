@@ -1,12 +1,57 @@
-# Core packages
+# Core
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 streamlit==1.28.1
 pandas==2.1.3
 numpy==1.24.3
+
+# Machine Learning
 scikit-learn==1.3.2
+tensorflow==2.13.0  # or pytorch if preferred
+transformers==4.35.0
+xgboost==1.7.6
+prophet==1.1.5
+
+# Database
+sqlalchemy==2.0.23
+alembic==1.12.1
+psycopg2-binary==2.9.9
+redis==5.0.1
+celery==5.3.4
+
+# OCR & Image Processing
+pytesseract==0.3.10
+Pillow==10.1.0
+opencv-python==4.8.1.78
+pdf2image==1.16.3
+
+# Visualization
 plotly==5.17.0
+matplotlib==3.7.2
+seaborn==0.12.2
+bokeh==3.3.0
+
+# Web & API
 requests==2.31.0
-joblib==1.3.2
+aiohttp==3.9.1
+websockets==12.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
 python-multipart==0.0.6
-pydantic==2.5.0
+pydantic[email]==2.5.0
+
+# Utilities
+python-dotenv==1.0.0
+joblib==1.3.2
+celery==5.3.4
+python-dateutil==2.8.2
+pytz==2023.3
+
+# Excel/PDF Export
+openpyxl==3.1.2
+xlsxwriter==3.1.9
+reportlab==4.0.4
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
